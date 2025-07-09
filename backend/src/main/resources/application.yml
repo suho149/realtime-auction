@@ -1,0 +1,46 @@
+spring:
+  # .env 파일을 설정으로 가져오기. optional:true는 파일이 없어도 에러를 발생시키지 않음.
+  config:
+    import: "optional:file:./backend/.env[.properties]"
+
+  # --- Datasource 설정 ---
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+    # ${...:default_value} 형식으로, 환경변수가 없으면 기본값(빈 문자열)을 사용
+    url: ${DB_URL:}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
+
+  # --- Redis 설정 ---
+  # --- OAuth2 클라이언트 설정 ---
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:}
+            client-secret: ${GOOGLE_CLIENT_SECRET:}
+            scope:
+              - email
+              - profile
+
+  # --- JPA 설정 (환경 변수와 무관한 공통 설정) ---
+  jpa:
+    hibernate:
+      # ${...:update} -> 환경변수가 없으면 기본값으로 update 사용
+      ddl-auto: ${DDL_AUTO:update}
+    properties:
+      hibernate:
+        show_sql: true
+        format_sql: true
+    open-in-view: false
+  data:
+    redis:
+      host: ${REDIS_HOST:}
+      port: ${REDIS_PORT:}
+
+# JWT 관련 설정값 추가
+jwt:
+  secret: ${JWT_SECRET_KEY:}
+  access-token-expiration-ms: ${ACCESS_TOKEN_EXPIRATION_MS:}
+  refresh-token-expiration-ms: ${REFRESH_TOKEN_EXPIRATION_MS:}

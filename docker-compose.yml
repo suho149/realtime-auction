@@ -1,0 +1,56 @@
+# docker-compose.yml (수정 후)
+
+# version: '3.8' # 최신 버전에서는 불필요하므로 삭제 권장
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: realtime-auction-backend
+    ports:
+      - "8080:8080"
+    # 이제 최상위 .env 파일을 읽도록 경로 수정
+    env_file:
+      - ./.env
+    depends_on:
+      - mariadb
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: realtime-auction-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+  mariadb:
+    image: mariadb:10.5
+    container_name: auction-mariadb
+    ports:
+      - "3306:3306"
+    environment:
+      # ${...} 구문을 사용해 최상위 .env 파일의 값을 읽어옴
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: auction-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  mariadb-data:
+  redis-data:
