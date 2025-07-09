@@ -68,6 +68,7 @@ public class SecurityConfig {
                         // 상품 목록 조회는 인증 없이도 가능하도록 변경
                         .requestMatchers(HttpMethod.GET, "/api/v1/products", "/api/v1/products/**").permitAll()
                         .requestMatchers("/", "/login", "/oauth2/**", "/api/v1/auth/reissue").permitAll()
+                        .requestMatchers("/ws/**").permitAll() // WebSocket 경로 허용 추가
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2

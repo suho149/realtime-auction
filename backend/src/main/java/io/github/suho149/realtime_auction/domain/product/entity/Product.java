@@ -48,6 +48,13 @@ public class Product {
     @JoinColumn(name = "winner_id")
     private User winner; // 낙찰자
 
+    // 낙찰 처리 메서드
+    public void closeAuction(User winner, Long winningPrice) {
+        this.winner = winner;
+        this.winningPrice = winningPrice;
+        this.status = ProductStatus.SOLD_OUT;
+    }
+
     @Builder
     public Product(String title, String description, Long startingPrice, LocalDateTime auctionStartTime, LocalDateTime auctionEndTime, User seller) {
         this.title = title;

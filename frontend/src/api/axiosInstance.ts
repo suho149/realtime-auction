@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { deleteCookie } from '../utils/cookie';
 
 const axiosInstance = axios.create({
     baseURL: 'http://localhost:8080',
@@ -53,6 +54,11 @@ axiosInstance.interceptors.response.use(
                 // 재발급 실패 시 (Refresh Token 만료 등)
                 processQueue(reissueError as AxiosError);
                 console.error("Token refresh failed:", reissueError);
+
+                // 모든 토큰 쿠키 삭제
+                deleteCookie('access_token');
+                deleteCookie('refresh_token');
+
                 // 로그아웃 처리 또는 로그인 페이지로 리디렉션
                 window.location.href = '/login';
                 return Promise.reject(reissueError);

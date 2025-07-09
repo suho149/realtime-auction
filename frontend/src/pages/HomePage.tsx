@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axiosInstance from '../api/axiosInstance';
+import { getCookieValue } from '../utils/cookie';
 
 // 상품 데이터 타입 정의
 interface Product {
@@ -27,9 +28,23 @@ const HomePage = () => {
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(false); // 로딩 상태 추가
+    const [isLoggedIn, setIsLoggedIn] = useState(false); // 로그인 상태를 관리하는 state
 
     // useRef를 사용하여 중복 호출 방지
     const loadingRef = React.useRef(false);
+
+    useEffect(() => {
+        // 페이지 로드 시 Access Token 쿠키 존재 여부로 로그인 상태 체크
+        const accessToken = getCookieValue('access_token');
+        if (accessToken) {
+            setIsLoggedIn(true);
+        } else {
+            setIsLoggedIn(false);
+        }
+
+        // 컴포넌트 마운트 시 첫 페이지 데이터 로드
+        fetchProducts(0);
+    }, []); // 의존성 배열을 비워둠
 
     const fetchProducts = async (pageNum: number) => {
         // 이미 로딩 중이면 실행하지 않음
@@ -75,7 +90,18 @@ const HomePage = () => {
     return (
         <div>
             <h1>실시간 경매 목록</h1>
-            <Link to="/products/new"><button>상품 등록하기</button></Link>
+            {/* 로그인 상태에 따라 다른 버튼을 렌더링 */}
+            {isLoggedIn ? (
+                // 로그인 상태일 때: 상품 등록하기 버튼
+                <Link to="/products/new">
+                    <button>상품 등록하기</button>
+                </Link>
+            ) : (
+                // 로그아웃 상태일 때: 로그인 페이지로 가는 버튼
+                <Link to="/login">
+                    <button>로그인 / 회원가입</button>
+                </Link>
+            )}
 
             <div style={{ marginTop: '20px' }}>
                 {products.map(product => (

@@ -1,12 +1,15 @@
 package io.github.suho149.realtime_auction.domain.product.repository;
 
 import io.github.suho149.realtime_auction.domain.product.entity.Product;
+import io.github.suho149.realtime_auction.domain.product.entity.ProductStatus;
 import io.lettuce.core.dynamic.annotation.Param;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
@@ -20,4 +23,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     // id로 상품을 조회할 때 seller 정보도 함께 가져옴
     @Query("SELECT p FROM Product p JOIN FETCH p.seller WHERE p.id = :id")
     Optional<Product> findByIdWithSeller(@Param("id") Long id);
+
+    // 스케줄링 대상 조회 메서드 추가
+    // 현재 시간을 기준으로, 경매 종료 시간이 지났고 상태가 SELLING인 상품들을 조회
+    List<Product> findByAuctionEndTimeBeforeAndStatus(LocalDateTime now, ProductStatus status);
 }

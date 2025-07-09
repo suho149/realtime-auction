@@ -24,6 +24,16 @@ interface AuctionStatus {
     bidderCount: number;
 }
 
+// 쿠키 값을 가져오는 헬퍼 함수
+const getCookieValue = (name: string): string | null => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+        return parts.pop()?.split(';').shift() || null;
+    }
+    return null;
+};
+
 const ProductDetailPage = () => {
     const { productId } = useParams<{ productId: string }>();
     const [product, setProduct] = useState<ProductDetail | null>(null);
@@ -49,33 +59,46 @@ const ProductDetailPage = () => {
             fetchProduct();
         }
 
-        // --- WebSocket 연결 ---
+        // --- WebSocket 연결 로직 ---
+        const connectWebSocket = () => {
+            if (productId) {
+                const accessToken = getCookieValue('access_token');
+
+                // WebSocket 클라이언트 생성 시 connectHeaders 추가
+                const client = new Client({
+                    webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
+                    connectHeaders: {
+                        // Authorization 헤더에 Bearer 토큰을 담아 전송
+                        Authorization: `Bearer ${accessToken}`
+                    },
+                    debug: (str) => { console.log(new Date(), str); },
+                    reconnectDelay: 5000,
+                })
+
+                // 연결 성공 시 콜백
+                client.onConnect = () => {
+                    console.log('WebSocket 연결 성공!');
+                    client.subscribe(`/topic/auctions/${productId}`, (message) => {
+                        const status = JSON.parse(message.body) as AuctionStatus;
+                        setAuctionStatus(status);
+                    });
+                };
+
+                // 연결 에러 시 콜백
+                client.onStompError = (frame) => {
+                    console.error('STOMP 에러:', frame);
+                };
+
+                client.activate();
+                clientRef.current = client;
+            }
+        };
+
         if (productId) {
-            // WebSocket 클라이언트 생성
-            const client = new Client({
-                webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
-                debug: (str) => { console.log(new Date(), str); },
-                reconnectDelay: 5000,
+            fetchProduct().then(() => {
+                // 상품 정보를 성공적으로 불러온 후에 WebSocket 연결 시도
+                connectWebSocket();
             });
-
-            // 연결 성공 시 콜백
-            client.onConnect = () => {
-                console.log('WebSocket 연결 성공!');
-                // 해당 상품의 경매 상태 토픽 구독
-                client.subscribe(`/topic/auctions/${productId}`, (message) => {
-                    const status = JSON.parse(message.body) as AuctionStatus;
-                    setAuctionStatus(status);
-                });
-            };
-
-            // 연결 에러 시 콜백
-            client.onStompError = (frame) => {
-                console.error('STOMP 에러:', frame);
-            };
-
-            // 클라이언트 활성화
-            client.activate();
-            clientRef.current = client;
         }
 
         // 컴포넌트 언마운트 시 연결 종료
@@ -112,6 +135,9 @@ const ProductDetailPage = () => {
         return <div>상품 정보를 찾을 수 없습니다.</div>;
     }
 
+    // 현재 시간이 경매 종료 시간을 지났는지 또는 상태가 SOLD_OUT인지 확인
+    const isAuctionEnded = new Date(product.auctionEndTime) < new Date() || product.status === 'SOLD_OUT';
+
     return (
         <div>
             <h1>{product.title}</h1>
@@ -131,16 +157,23 @@ const ProductDetailPage = () => {
             <p><strong>최고 입찰자:</strong> {auctionStatus ? auctionStatus.highestBidderName : '없음'}</p>
             <p><strong>총 입찰자 수:</strong> {auctionStatus ? auctionStatus.bidderCount : 0}명</p>
 
-            <form onSubmit={handleBidSubmit} style={{ marginTop: '20px' }}>
-                <input
-                    type="number"
-                    value={bidAmount}
-                    onChange={(e) => setBidAmount(Number(e.target.value))}
-                    placeholder="입찰 금액"
-                    required
-                />
-                <button type="submit">입찰하기</button>
-            </form>
+            {/* 경매가 진행 중일 때만 입찰 폼을 보여줌 */}
+            {!isAuctionEnded ? (
+                <form onSubmit={handleBidSubmit} style={{ marginTop: '20px' }}>
+                    <input
+                        type="number"
+                        value={bidAmount}
+                        onChange={(e) => setBidAmount(Number(e.target.value))}
+                        placeholder="입찰 금액"
+                        required
+                    />
+                    <button type="submit">입찰하기</button>
+                </form>
+            ) : (
+                <div style={{ marginTop: '20px', color: 'red', fontWeight: 'bold' }}>
+                    <p>이 경매는 종료되었습니다.</p>
+                </div>
+            )}
         </div>
     );
 };
