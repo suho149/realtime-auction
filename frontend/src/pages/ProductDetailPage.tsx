@@ -4,17 +4,18 @@ import axiosInstance from '../api/axiosInstance';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
-// ProductResponse와 동일한 타입
 interface ProductDetail {
     id: number;
     title: string;
     description: string;
     startingPrice: number;
-    winningPrice: number | null;
+    currentPrice: number;
+    highestBidderName: string;
     auctionStartTime: string;
     auctionEndTime: string;
     status: string;
     sellerName: string;
+    bidderCount: number;
 }
 
 // AuctionStatus 타입 추가
@@ -43,39 +44,33 @@ const ProductDetailPage = () => {
     const [bidAmount, setBidAmount] = useState(0);
     const clientRef = useRef<Client | null>(null);
 
+    const [isAuthenticated, setIsAuthenticated] = useState(false); // 인증 상태 state 추가
+
     useEffect(() => {
-        const fetchProduct = async () => {
+        // 인증 상태를 확인하고, 유효한 토큰을 보장하는 함수
+        const checkAuthAndConnect = async () => {
             try {
-                const response = await axiosInstance.get<ProductDetail>(`/api/v1/products/${productId}`);
-                setProduct(response.data);
+                // 1. (선택사항이지만 권장) 인증이 필요한 API를 먼저 호출하여 로그인 상태 확인 및 토큰 갱신
+                await axiosInstance.get('/api/v1/users/me');
+                setIsAuthenticated(true);
+                return getCookieValue('access_token'); // 갱신된 최신 토큰 반환
             } catch (error) {
-                console.error("상품 상세 정보 조회 실패:", error);
-            } finally {
-                setLoading(false);
+                setIsAuthenticated(false);
+                console.error("인증 실패, 비로그인 상태로 WebSocket 연결 시도:", error);
+                return null; // 토큰이 없음을 명시
             }
         };
 
-        if (productId) {
-            fetchProduct();
-        }
-
-        // --- WebSocket 연결 로직 ---
-        const connectWebSocket = () => {
+        const connectWebSocket = (accessToken: string | null) => {
             if (productId) {
-                const accessToken = getCookieValue('access_token');
-
-                // WebSocket 클라이언트 생성 시 connectHeaders 추가
                 const client = new Client({
                     webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
-                    connectHeaders: {
-                        // Authorization 헤더에 Bearer 토큰을 담아 전송
-                        Authorization: `Bearer ${accessToken}`
-                    },
+                    // 인증 상태 확인 후 가져온 토큰을 헤더에 추가
+                    connectHeaders: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
                     debug: (str) => { console.log(new Date(), str); },
                     reconnectDelay: 5000,
-                })
+                });
 
-                // 연결 성공 시 콜백
                 client.onConnect = () => {
                     console.log('WebSocket 연결 성공!');
                     client.subscribe(`/topic/auctions/${productId}`, (message) => {
@@ -84,22 +79,38 @@ const ProductDetailPage = () => {
                     });
                 };
 
-                // 연결 에러 시 콜백
-                client.onStompError = (frame) => {
-                    console.error('STOMP 에러:', frame);
-                };
-
+                client.onStompError = (frame) => { console.error('STOMP 에러:', frame); };
                 client.activate();
                 clientRef.current = client;
             }
         };
 
-        if (productId) {
-            fetchProduct().then(() => {
-                // 상품 정보를 성공적으로 불러온 후에 WebSocket 연결 시도
-                connectWebSocket();
-            });
-        }
+        const initializePage = async () => {
+            if (!productId) return;
+
+            setLoading(true);
+            // 1. 상품 정보를 먼저 불러옴
+            try {
+                const response = await axiosInstance.get<ProductDetail>(`/api/v1/products/${productId}`);
+                const productData = response.data; // 가독성을 위해 변수에 담기
+                setProduct(productData);
+                setAuctionStatus({
+                    currentHighestBid: productData.currentPrice,
+                    highestBidderName: productData.highestBidderName,
+                    bidderCount: productData.bidderCount // <-- API 응답값으로 초기화
+                });
+            } catch (error) {
+                console.error("상품 상세 정보 조회 실패:", error);
+            }
+
+            // 2. 인증 상태를 확인하고, 그 결과로 받은 토큰으로 웹소켓 연결
+            const token = await checkAuthAndConnect();
+            connectWebSocket(token);
+
+            setLoading(false);
+        };
+
+        initializePage();
 
         // 컴포넌트 언마운트 시 연결 종료
         return () => {
@@ -138,6 +149,9 @@ const ProductDetailPage = () => {
     // 현재 시간이 경매 종료 시간을 지났는지 또는 상태가 SOLD_OUT인지 확인
     const isAuctionEnded = new Date(product.auctionEndTime) < new Date() || product.status === 'SOLD_OUT';
 
+    // 입찰 폼을 보여줄지 여부를 결정
+    const canBid = !isAuctionEnded && isAuthenticated;
+
     return (
         <div>
             <h1>{product.title}</h1>
@@ -158,7 +172,7 @@ const ProductDetailPage = () => {
             <p><strong>총 입찰자 수:</strong> {auctionStatus ? auctionStatus.bidderCount : 0}명</p>
 
             {/* 경매가 진행 중일 때만 입찰 폼을 보여줌 */}
-            {!isAuctionEnded ? (
+            {canBid ? (
                 <form onSubmit={handleBidSubmit} style={{ marginTop: '20px' }}>
                     <input
                         type="number"
@@ -170,8 +184,8 @@ const ProductDetailPage = () => {
                     <button type="submit">입찰하기</button>
                 </form>
             ) : (
-                <div style={{ marginTop: '20px', color: 'red', fontWeight: 'bold' }}>
-                    <p>이 경매는 종료되었습니다.</p>
+                <div style={{ marginTop: '20px', color: 'gray' }}>
+                    {isAuctionEnded ? '이 경매는 종료되었습니다.' : '로그인 후 입찰에 참여할 수 있습니다.'}
                 </div>
             )}
         </div>
