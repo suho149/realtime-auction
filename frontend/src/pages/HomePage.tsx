@@ -1,9 +1,10 @@
-import React, {useEffect, useRef, useState} from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import axiosInstance from '../api/axiosInstance';
 import { getCookieValue, deleteCookie } from '../utils/cookie';
+import Header from '../components/Header';
+import ProductCard from '../components/ProductCard';
+import { Search } from 'lucide-react';
 
-// 상품 데이터 타입 정의
 interface Product {
     id: number;
     title: string;
@@ -12,18 +13,11 @@ interface Product {
     sellerName: string;
 }
 
-// API 응답의 Page 객체 타입 정의
 interface Page<T> {
     content: T[];
-    totalPages: number;
-    totalElements: number;
-    number: number; // 현재 페이지 번호 (0부터 시작)
-    size: number; // 페이지 크기
-    first: boolean; // 첫 페이지 여부
-    last: boolean; // 마지막 페이지 여부
+    last: boolean;
 }
 
-// ▼▼▼ 사용자 정보 인터페이스 추가 ▼▼▼
 interface UserInfo {
     name: string;
     email: string;
@@ -34,117 +28,112 @@ const HomePage = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
-    const [loading, setLoading] = useState(false); // 로딩 상태 추가
+    const [loading, setLoading] = useState(false);
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-    const isLoggedIn = !!userInfo; // userInfo가 있으면 로그인 상태로 간주
-    const loadingRef = useRef(false);
+
+    const observer = useRef<IntersectionObserver>();
+    const lastProductElementRef = useCallback((node: HTMLDivElement | null) => {
+        if (loading) return;
+        if (observer.current) observer.current.disconnect();
+        observer.current = new IntersectionObserver(entries => {
+            if (entries[0].isIntersecting && hasMore) {
+                setPage(prevPage => prevPage + 1);
+            }
+        });
+        if (node) observer.current.observe(node);
+    }, [loading, hasMore]);
 
     useEffect(() => {
-        // ▼▼▼ 컴포넌트 마운트 시 인증 상태 확인 및 데이터 로드 ▼▼▼
         const initialize = async () => {
-            // 1. 사용자 정보 조회를 시도하여 로그인 상태 확인
             try {
                 const response = await axiosInstance.get<UserInfo>('/api/v1/users/me');
-                setUserInfo(response.data); // 성공 시 사용자 정보 저장
+                setUserInfo(response.data);
             } catch (error) {
                 console.log("비로그인 상태이거나 토큰이 만료되었습니다.");
-                setUserInfo(null); // 실패 시 사용자 정보 null로 설정
+                setUserInfo(null);
             }
-
-            // 2. 상품 목록 불러오기
-            fetchProducts(0);
         };
-
         initialize();
     }, []);
 
-    const fetchProducts = async (pageNum: number) => {
-        if (loadingRef.current) return;
-        setLoading(true);
-        loadingRef.current = true;
+    useEffect(() => {
+        // page가 0일 때는 초기 로드, 그 이후에는 무한 스크롤로 간주
+        // 이미 데이터가 있는데 page가 0이면 중복 로드일 수 있으므로 방지
+        if (page === 0 && products.length > 0) return;
 
-        try {
-            const response = await axiosInstance.get<Page<Product>>(`/api/v1/products?page=${pageNum}&size=10&sort=auctionEndTime,asc`);
-            setProducts(prev => {
-                const existingIds = new Set(prev.map(p => p.id));
-                const newProducts = response.data.content.filter(p => !existingIds.has(p.id));
-                return [...prev, ...newProducts];
-            });
-            setHasMore(!response.data.last);
+        const fetchProducts = async () => {
+            setLoading(true);
+            try {
+                const response = await axiosInstance.get<Page<Product>>(`/api/v1/products?page=${page}&size=9&sort=auctionEndTime,asc`);
 
-            // API 호출이 성공적으로 끝난 후에 로그인 상태를 체크합니다.
-            const accessToken = getCookieValue('access_token');
+                setProducts(prev => {
+                    const existingIds = new Set(prev.map(p => p.id));
+                    const newProducts = response.data.content.filter(p => !existingIds.has(p.id));
+                    return [...prev, ...newProducts];
+                });
 
-        } catch (error) {
-            console.error("상품 목록 조회 실패:", error);
-            // API 호출 실패 시(토큰 만료 후 재발급도 실패 등) 로그아웃 상태로 간주합니다.
-        } finally {
+                setHasMore(!response.data.last);
+            } catch (error) {
+                console.error("상품 목록 조회 실패:", error);
+            }
             setLoading(false);
-            loadingRef.current = false;
-        }
-    };
+        };
+        fetchProducts();
+    }, [page]);
 
-    const loadMore = () => {
-        // 다음 페이지 번호를 계산하여 fetchProducts 호출
-        setPage(prevPage => {
-            const nextPage = prevPage + 1;
-            fetchProducts(nextPage);
-            return nextPage;
-        });
-    };
-
-    // ▼▼▼ 로그아웃 핸들러 추가 ▼▼▼
     const handleLogout = async () => {
         try {
             await axiosInstance.post('/api/v1/auth/logout');
         } catch (error) {
             console.error("로그아웃 API 호출 실패:", error);
         } finally {
-            // API 호출 성공 여부와 관계없이 쿠키 삭제 및 상태 업데이트
             deleteCookie('access_token');
             deleteCookie('refresh_token');
             setUserInfo(null);
-            // 필요하다면 window.location.reload(); 또는 navigate 사용
         }
     };
 
     return (
-        <div>
-            {/* ▼▼▼ 헤더 UI 수정 ▼▼▼ */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h1>실시간 경매 목록</h1>
-                {isLoggedIn && userInfo ? (
-                    <div>
-                        <img src={userInfo.picture} alt={userInfo.name} width="30" style={{ borderRadius: '50%', marginRight: '10px' }} />
-                        <span>{userInfo.name}님</span>
-                        <Link to="/products/new" style={{ marginLeft: '15px' }}>
-                            <button>상품 등록하기</button>
-                        </Link>
-                        <button onClick={handleLogout} style={{ marginLeft: '10px' }}>로그아웃</button>
+        <div className="bg-gray-50 min-h-screen">
+            <Header userInfo={userInfo} onLogout={handleLogout} />
+
+            <main className="container mx-auto px-4 py-8">
+                <section className="text-center bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-24 px-6 rounded-2xl shadow-2xl mb-16 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full bg-black bg-opacity-20"></div>
+                    <div className="relative z-10">
+                        <h1 className="text-5xl font-extrabold mb-4 tracking-tight">세상의 모든 것을 경매하다</h1>
+                        <p className="text-xl mb-8 max-w-2xl mx-auto">지금 바로 참여하여 특별한 상품을 획득하세요!</p>
+                        <div className="relative w-full max-w-2xl mx-auto">
+                            <input
+                                type="text"
+                                placeholder="어떤 상품을 찾고 계신가요?"
+                                className="w-full p-4 pl-12 rounded-full text-gray-800 focus:outline-none focus:ring-4 focus:ring-yellow-400 transition-shadow duration-300"
+                            />
+                            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={20} strokeWidth={2.5} />
+                        </div>
                     </div>
-                ) : (
-                    <Link to="/login">
-                        <button>로그인 / 회원가입</button>
-                    </Link>
+                </section>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {products.map((product, index) => {
+                        if (products.length === index + 1) {
+                            return <div ref={lastProductElementRef} key={product.id}><ProductCard product={product} /></div>;
+                        } else {
+                            return <ProductCard key={product.id} product={product} />;
+                        }
+                    })}
+                </div>
+
+                {loading && (
+                    <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                        <p className="mt-4 text-gray-600">상품을 불러오는 중...</p>
+                    </div>
                 )}
-            </div>
-
-            <div style={{ marginTop: '20px' }}>
-                {products.map(product => (
-                    // key는 여전히 product.id를 사용해도 안전
-                    <div key={product.id} style={{ border: '1px solid #ccc', padding: '10px', marginBottom: '10px' }}>
-                        <Link to={`/products/${product.id}`}>
-                            <h2>{product.title}</h2>
-                        </Link>
-                        <p>판매자: {product.sellerName}</p>
-                        <p>시작 가격: {product.startingPrice.toLocaleString()}원</p>
-                        <p>경매 마감: {new Date(product.auctionEndTime).toLocaleString()}</p>
-                    </div>
-                ))}
-            </div>
-
-            {loading && <div>로딩 중...</div>}
-            {hasMore && !loading && <button onClick={loadMore}>더 보기</button>}
+                {!hasMore && products.length > 0 && (
+                    <p className="text-center text-gray-500 py-12">모든 상품을 불러왔습니다.</p>
+                )}
+            </main>
         </div>
     );
 };

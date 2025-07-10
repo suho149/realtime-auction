@@ -1,8 +1,11 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import axiosInstance from '../api/axiosInstance';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
+import { getCookieValue, deleteCookie } from '../utils/cookie';
+import Header from '../components/Header';
+import { Clock, User, Users, Info } from 'lucide-react';
 
 interface ProductDetail {
     id: number;
@@ -18,176 +21,177 @@ interface ProductDetail {
     bidderCount: number;
 }
 
-// AuctionStatus 타입 추가
 interface AuctionStatus {
     currentHighestBid: number;
     highestBidderName: string;
     bidderCount: number;
 }
 
-// 쿠키 값을 가져오는 헬퍼 함수
-const getCookieValue = (name: string): string | null => {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) {
-        return parts.pop()?.split(';').shift() || null;
-    }
-    return null;
-};
+interface UserInfo {
+    name: string;
+    email: string;
+    picture: string;
+}
 
 const ProductDetailPage = () => {
     const { productId } = useParams<{ productId: string }>();
     const [product, setProduct] = useState<ProductDetail | null>(null);
     const [loading, setLoading] = useState(true);
-
     const [auctionStatus, setAuctionStatus] = useState<AuctionStatus | null>(null);
-    const [bidAmount, setBidAmount] = useState(0);
+    const [bidAmount, setBidAmount] = useState<number | ''>('');
     const clientRef = useRef<Client | null>(null);
-
-    const [isAuthenticated, setIsAuthenticated] = useState(false); // 인증 상태 state 추가
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
     useEffect(() => {
-        // 인증 상태를 확인하고, 유효한 토큰을 보장하는 함수
-        const checkAuthAndConnect = async () => {
-            try {
-                // 1. (선택사항이지만 권장) 인증이 필요한 API를 먼저 호출하여 로그인 상태 확인 및 토큰 갱신
-                await axiosInstance.get('/api/v1/users/me');
-                setIsAuthenticated(true);
-                return getCookieValue('access_token'); // 갱신된 최신 토큰 반환
-            } catch (error) {
-                setIsAuthenticated(false);
-                console.error("인증 실패, 비로그인 상태로 WebSocket 연결 시도:", error);
-                return null; // 토큰이 없음을 명시
-            }
-        };
-
-        const connectWebSocket = (accessToken: string | null) => {
-            if (productId) {
-                const client = new Client({
-                    webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
-                    // 인증 상태 확인 후 가져온 토큰을 헤더에 추가
-                    connectHeaders: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-                    debug: (str) => { console.log(new Date(), str); },
-                    reconnectDelay: 5000,
-                });
-
-                client.onConnect = () => {
-                    console.log('WebSocket 연결 성공!');
-                    client.subscribe(`/topic/auctions/${productId}`, (message) => {
-                        const status = JSON.parse(message.body) as AuctionStatus;
-                        setAuctionStatus(status);
-                    });
-                };
-
-                client.onStompError = (frame) => { console.error('STOMP 에러:', frame); };
-                client.activate();
-                clientRef.current = client;
-            }
-        };
-
         const initializePage = async () => {
             if (!productId) return;
-
             setLoading(true);
-            // 1. 상품 정보를 먼저 불러옴
+
             try {
-                const response = await axiosInstance.get<ProductDetail>(`/api/v1/products/${productId}`);
-                const productData = response.data; // 가독성을 위해 변수에 담기
+                const userResponse = await axiosInstance.get<UserInfo>('/api/v1/users/me');
+                setUserInfo(userResponse.data);
+                setIsAuthenticated(true);
+            } catch (error) {
+                setUserInfo(null);
+                setIsAuthenticated(false);
+            }
+
+            try {
+                const productResponse = await axiosInstance.get<ProductDetail>(`/api/v1/products/${productId}`);
+                const productData = productResponse.data;
                 setProduct(productData);
                 setAuctionStatus({
                     currentHighestBid: productData.currentPrice,
                     highestBidderName: productData.highestBidderName,
-                    bidderCount: productData.bidderCount // <-- API 응답값으로 초기화
+                    bidderCount: productData.bidderCount,
                 });
             } catch (error) {
                 console.error("상품 상세 정보 조회 실패:", error);
             }
 
-            // 2. 인증 상태를 확인하고, 그 결과로 받은 토큰으로 웹소켓 연결
-            const token = await checkAuthAndConnect();
-            connectWebSocket(token);
-
+            connectWebSocket();
             setLoading(false);
+        };
+
+        const connectWebSocket = () => {
+            const accessToken = getCookieValue('access_token');
+            const client = new Client({
+                webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
+                connectHeaders: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+                debug: (str) => { console.log(new Date(), str); },
+                reconnectDelay: 5000,
+            });
+            client.onConnect = () => {
+                console.log('WebSocket 연결 성공!');
+                client.subscribe(`/topic/auctions/${productId}`, (message) => {
+                    const status = JSON.parse(message.body) as AuctionStatus;
+                    setAuctionStatus(status);
+                });
+            };
+            client.onStompError = (frame) => { console.error('STOMP 에러:', frame); };
+            client.activate();
+            clientRef.current = client;
         };
 
         initializePage();
 
-        // 컴포넌트 언마운트 시 연결 종료
         return () => {
             if (clientRef.current) {
                 clientRef.current.deactivate();
-                console.log('WebSocket 연결 종료.');
             }
         };
     }, [productId]);
 
-    // 입찰 제출 핸들러
-    const handleBidSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (clientRef.current && clientRef.current.connected && productId) {
-            const bidRequest = {
-                productId: Number(productId),
-                bidAmount: Number(bidAmount),
-            };
-            // 서버의 /app/auctions/bid 경로로 메시지 발행
-            clientRef.current.publish({
-                destination: '/app/auctions/bid',
-                body: JSON.stringify(bidRequest),
-            });
-            setBidAmount(0); // 입찰 후 입력 필드 초기화
+    const handleLogout = async () => {
+        try { await axiosInstance.post('/api/v1/auth/logout'); }
+        catch (error) { console.error("로그아웃 API 호출 실패:", error); }
+        finally {
+            deleteCookie('access_token');
+            deleteCookie('refresh_token');
+            setUserInfo(null);
+            setIsAuthenticated(false);
         }
     };
 
-    if (loading) {
-        return <div>로딩 중...</div>;
-    }
+    const handleBidSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (clientRef.current?.connected && productId && bidAmount) {
+            clientRef.current.publish({
+                destination: '/app/auctions/bid',
+                body: JSON.stringify({ productId: Number(productId), bidAmount: Number(bidAmount) }),
+            });
+            setBidAmount('');
+        }
+    };
 
-    if (!product) {
-        return <div>상품 정보를 찾을 수 없습니다.</div>;
-    }
+    if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-24 w-24 border-t-4 border-b-4 border-blue-500"></div></div>;
+    if (!product) return <div>상품 정보를 찾을 수 없습니다.</div>;
 
-    // 현재 시간이 경매 종료 시간을 지났는지 또는 상태가 SOLD_OUT인지 확인
     const isAuctionEnded = new Date(product.auctionEndTime) < new Date() || product.status === 'SOLD_OUT';
-
-    // 입찰 폼을 보여줄지 여부를 결정
     const canBid = !isAuctionEnded && isAuthenticated;
 
     return (
-        <div>
-            <h1>{product.title}</h1>
-            <p><strong>판매자:</strong> {product.sellerName}</p>
-            <p><strong>상태:</strong> {product.status}</p>
-            <hr />
-            <p>{product.description}</p>
-            <hr />
-            <p><strong>시작 가격:</strong> {product.startingPrice.toLocaleString()}원</p>
-            <p><strong>경매 시작:</strong> {new Date(product.auctionStartTime).toLocaleString()}</p>
-            <p><strong>경매 마감:</strong> {new Date(product.auctionEndTime).toLocaleString()}</p>
+        <div className="bg-gray-50 min-h-screen">
+            <Header userInfo={userInfo} onLogout={handleLogout} />
 
-            {/* TODO: 여기에 경매 입찰 UI 추가 */}
-            <hr />
-            <h2>실시간 경매 현황</h2>
-            <p><strong>현재 최고가:</strong> {auctionStatus ? auctionStatus.currentHighestBid.toLocaleString() : product?.startingPrice.toLocaleString()}원</p>
-            <p><strong>최고 입찰자:</strong> {auctionStatus ? auctionStatus.highestBidderName : '없음'}</p>
-            <p><strong>총 입찰자 수:</strong> {auctionStatus ? auctionStatus.bidderCount : 0}명</p>
+            <main className="container mx-auto px-4 py-12">
+                <div className="bg-white p-8 md:p-12 rounded-2xl shadow-xl max-w-6xl mx-auto">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                        <div className="bg-gray-200 h-96 rounded-lg flex items-center justify-center">
+                            <span className="text-gray-500">Image Placeholder</span>
+                        </div>
 
-            {/* 경매가 진행 중일 때만 입찰 폼을 보여줌 */}
-            {canBid ? (
-                <form onSubmit={handleBidSubmit} style={{ marginTop: '20px' }}>
-                    <input
-                        type="number"
-                        value={bidAmount}
-                        onChange={(e) => setBidAmount(Number(e.target.value))}
-                        placeholder="입찰 금액"
-                        required
-                    />
-                    <button type="submit">입찰하기</button>
-                </form>
-            ) : (
-                <div style={{ marginTop: '20px', color: 'gray' }}>
-                    {isAuctionEnded ? '이 경매는 종료되었습니다.' : '로그인 후 입찰에 참여할 수 있습니다.'}
+                        <div className="flex flex-col justify-between">
+                            <div>
+                                <span className="text-sm font-semibold text-blue-600 bg-blue-100 px-3 py-1 rounded-full">{product.status}</span>
+                                <h1 className="text-4xl font-bold text-gray-900 my-4">{product.title}</h1>
+                                <p className="text-gray-600 mb-6 leading-relaxed">{product.description}</p>
+                                <div className="flex items-center text-gray-500 text-sm mb-6">
+                                    <Clock size={16} className="mr-2" />
+                                    <span>경매 마감: {new Date(product.auctionEndTime).toLocaleString('ko-KR')}</span>
+                                </div>
+                            </div>
+
+                            <div className="bg-gray-100 p-6 rounded-lg">
+                                <div className="flex justify-between items-center mb-4">
+                                    <span className="text-gray-600 text-lg">현재 최고가</span>
+                                    <span className="text-3xl font-bold text-blue-600">
+                                        {auctionStatus ? auctionStatus.currentHighestBid.toLocaleString() : product.currentPrice.toLocaleString()}원
+                                    </span>
+                                </div>
+                                <div className="flex justify-between text-sm text-gray-500">
+                                    <span><User size={14} className="inline mr-1" />{auctionStatus ? auctionStatus.highestBidderName : product.highestBidderName}</span>
+                                    <span><Users size={14} className="inline mr-1" />{auctionStatus ? auctionStatus.bidderCount : product.bidderCount}명 참여</span>
+                                </div>
+                            </div>
+
+                            <div className="mt-6">
+                                {canBid ? (
+                                    <form onSubmit={handleBidSubmit} className="flex space-x-3">
+                                        <input
+                                            type="number"
+                                            className="w-full p-4 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
+                                            value={bidAmount}
+                                            onChange={(e) => setBidAmount(Number(e.target.value))}
+                                            placeholder={`현재가보다 높은 금액`}
+                                            required
+                                        />
+                                        <button type="submit" className="bg-blue-600 text-white font-bold py-4 px-8 rounded-lg hover:bg-blue-700 transition shadow-md">
+                                            입찰
+                                        </button>
+                                    </form>
+                                ) : (
+                                    <div className="text-center p-4 bg-gray-200 text-gray-600 rounded-lg flex items-center justify-center">
+                                        <Info size={18} className="mr-2" />
+                                        {isAuctionEnded ? '이 경매는 종료되었습니다.' : '로그인 후 입찰에 참여할 수 있습니다.'}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            )}
+            </main>
         </div>
     );
 };
