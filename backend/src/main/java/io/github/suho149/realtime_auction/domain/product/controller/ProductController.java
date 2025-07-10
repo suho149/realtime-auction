@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -43,7 +44,7 @@ public class ProductController {
     // 상품 목록 조회 API
     // 예: /api/v1/products?page=0&size=10&sort=id,desc
     @GetMapping
-    public ResponseEntity<Page<ProductResponse>> getProducts(@PageableDefault(size = 10, sort = "id") Pageable pageable) {
+    public ResponseEntity<Page<ProductResponse>> getProducts(@PageableDefault(size = 9, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<ProductResponse> products = productService.getProducts(pageable);
         return ResponseEntity.ok(products);
     }

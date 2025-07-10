@@ -11,6 +11,7 @@ interface Product {
     startingPrice: number;
     auctionEndTime: string;
     sellerName: string;
+    thumbnailUrl?: string; // 썸네일 URL (옵셔널)
 }
 
 interface Page<T> {

@@ -8,6 +8,7 @@ interface Product {
     startingPrice: number;
     auctionEndTime: string;
     sellerName: string;
+    thumbnailUrl?: string; // 썸네일 URL (옵셔널)
 }
 
 interface ProductCardProps {
@@ -18,8 +19,14 @@ const ProductCard = ({ product }: ProductCardProps) => {
     return (
         <div className="bg-white rounded-xl shadow-lg overflow-hidden transform hover:-translate-y-2 transition-all duration-300 ease-in-out hover:shadow-2xl">
             <Link to={`/products/${product.id}`} className="block">
-                <div className="bg-gray-200 h-48 flex items-center justify-center">
-                    <span className="text-gray-400">Image Placeholder</span>
+                <div className="bg-gray-200 h-48 flex items-center justify-center overflow-hidden">
+                    {product.thumbnailUrl ? (
+                        <img src={`http://localhost:8080${product.thumbnailUrl}`}
+                             alt={product.title}
+                             className="w-full h-full object-cover" />
+                    ) : (
+                        <span className="text-gray-400">Image Placeholder</span>
+                    )}
                 </div>
                 <div className="p-6">
                     <h2 className="text-xl font-bold text-gray-900 mb-2 truncate">{product.title}</h2>

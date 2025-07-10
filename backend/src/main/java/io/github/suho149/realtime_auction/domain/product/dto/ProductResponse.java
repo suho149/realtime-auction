@@ -26,9 +26,10 @@ public class ProductResponse {
     private final int bidderCount;
     private final Category category;
     private final List<String> imageUrls;
+    private final String thumbnailUrl; // 썸네일 URL 필드 추가
 
     // private 생성자: 모든 필드를 초기화하는 단일 생성자
-    private ProductResponse(Long id, String title, String description, Long startingPrice, Long currentPrice, LocalDateTime auctionStartTime, LocalDateTime auctionEndTime, ProductStatus status, String sellerName, String highestBidderName, int bidderCount, Category category, List<String> imageUrls) {
+    private ProductResponse(Long id, String title, String description, Long startingPrice, Long currentPrice, LocalDateTime auctionStartTime, LocalDateTime auctionEndTime, ProductStatus status, String sellerName, String highestBidderName, int bidderCount, Category category, List<String> imageUrls, String thumbnailUrl) {
         this.id = id;
         this.title = title;
         this.description = description;
@@ -42,6 +43,7 @@ public class ProductResponse {
         this.bidderCount = bidderCount;
         this.category = category;
         this.imageUrls = imageUrls;
+        this.thumbnailUrl = thumbnailUrl;
     }
 
     // 정적 팩토리 메서드: Product 엔티티와 Redis 데이터를 조합하여 DTO 생성
@@ -85,6 +87,8 @@ public class ProductResponse {
                 .map(ProductImage::getImageUrl)
                 .collect(Collectors.toList());
 
+        String thumbnailUrl = imageUrls.isEmpty() ? null : imageUrls.get(0);
+
         return new ProductResponse(
                 product.getId(),
                 product.getTitle(),
@@ -97,8 +101,9 @@ public class ProductResponse {
                 product.getSeller().getName(),
                 finalBidderName,
                 finalBidderCount,
-                product.getCategory(), // category 전달
-                imageUrls           // imageUrls 전달
+                product.getCategory(),
+                imageUrls,
+                thumbnailUrl // 생성자에 thumbnailUrl 전달
         );
     }
 
@@ -107,9 +112,8 @@ public class ProductResponse {
         Long currentPrice = (product.getWinningPrice() != null) ? product.getWinningPrice() : product.getStartingPrice();
         String bidderName = (product.getWinner() != null) ? product.getWinner().getName() : "입찰자 없음";
 
-        // 목록에서는 대표 이미지 1장만 보여주거나, 아예 보여주지 않을 수 있음
-        List<String> imageUrls = product.getImages().isEmpty() ? Collections.emptyList() :
-                List.of(product.getImages().get(0).getImageUrl());
+        // 목록에서는 대표 이미지 1장만 필요
+        String thumbnailUrl = product.getImages().isEmpty() ? null : product.getImages().get(0).getImageUrl();
 
         return new ProductResponse(
                 product.getId(),
@@ -123,8 +127,9 @@ public class ProductResponse {
                 product.getSeller().getName(),
                 bidderName,
                 0, // 목록에서는 총 입찰자 수 0으로 고정
-                product.getCategory(), // category 전달
-                imageUrls           // imageUrls 전달
+                product.getCategory(),
+                Collections.emptyList(), // 목록에서는 전체 이미지 URL 목록이 필요 없으므로 빈 리스트 전달
+                thumbnailUrl // 생성자에 thumbnailUrl 전달
         );
     }
 }

@@ -18,7 +18,7 @@ public class NotBeforeNowValidator implements ConstraintValidator<NotBeforeNow, 
 
         // 현재 시간에서 약간의 여유 시간(예: 100초)을 뺀 시간과 비교
         // 즉, 100초 전까지는 '현재'로 간주하여 통과시켜줌
-        LocalDateTime nowWithGracePeriod = LocalDateTime.now().minusSeconds(100);
+        LocalDateTime nowWithGracePeriod = LocalDateTime.now().minusMinutes(10);
 
         // 입력된 시간이 (현재-100초) 보다 이후인지 확인
         return value.isAfter(nowWithGracePeriod);
