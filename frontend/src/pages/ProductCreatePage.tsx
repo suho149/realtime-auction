@@ -9,6 +9,12 @@ interface UserInfo {
     picture: string;
 }
 
+const CATEGORIES = [
+    "DIGITAL_DEVICE", "HOME_APPLIANCES", "FURNITURE_INTERIOR", "LIFE_KITCHEN",
+    "CLOTHING", "BEAUTY", "SPORTS_LEISURE", "BOOKS_TICKETS_RECORDS",
+    "PET_SUPPLIES", "ETC"
+];
+
 const ProductCreatePage = () => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -18,6 +24,8 @@ const ProductCreatePage = () => {
     const [error, setError] = useState('');
     const navigate = useNavigate();
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+    const [images, setImages] = useState<File[]>([]);
+    const [category, setCategory] = useState(CATEGORIES[0]);
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -34,11 +42,34 @@ const ProductCreatePage = () => {
 
     const handleLogout = async () => { /* ... HomePage와 동일한 로직 ... */ };
 
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setImages(Array.from(e.target.files));
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
+        if (images.length === 0) {
+            setError("최소 1장 이상의 이미지를 등록해야 합니다.");
+            return;
+        }
+
+        const formData = new FormData();
+
+        // JSON 데이터를 Blob으로 만들어 FormData에 추가
+        const requestData = { title, description, startingPrice, auctionStartTime, auctionEndTime, category };
+        formData.append('request', new Blob([JSON.stringify(requestData)], { type: "application/json" }));
+
+        // 이미지 파일들을 FormData에 추가
+        images.forEach(image => {
+            formData.append('images', image);
+        });
+
         try {
-            await axiosInstance.post('/api/v1/products', { title, description, startingPrice, auctionStartTime, auctionEndTime });
+            await axiosInstance.post('/api/v1/products', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
             alert('상품이 성공적으로 등록되었습니다.');
             navigate('/');
         } catch (err: any) {
@@ -80,6 +111,17 @@ const ProductCreatePage = () => {
                                 <input id="auctionEndTime" type="datetime-local" value={auctionEndTime} onChange={(e) => setAuctionEndTime(e.target.value)} required
                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"/>
                             </div>
+                        </div>
+
+                        <div>
+                            <label>카테고리</label>
+                            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                                {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label>상품 이미지 (최소 1장)</label>
+                            <input type="file" multiple onChange={handleImageChange} accept="image/*" />
                         </div>
 
                         {error && <p className="text-red-500 text-sm text-center">{error}</p>}

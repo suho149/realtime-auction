@@ -11,8 +11,10 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URI;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/products")
@@ -22,13 +24,19 @@ public class ProductController {
     private final ProductService productService;
 
     @PostMapping
-    public ResponseEntity<Void> createProduct(@Valid @RequestBody ProductCreateRequest request, Authentication authentication) {
-        // Authentication 객체에서 현재 로그인한 사용자의 이메일을 가져옴
+    public ResponseEntity<Void> createProduct(
+            @Valid @RequestPart("request") ProductCreateRequest request,
+            @RequestPart("images") List<MultipartFile> images, // 이미지 파일 받기
+            Authentication authentication) {
+
+        if (images.isEmpty()) {
+            // 최소 1장 이상이어야 한다는 비즈니스 로직 처리
+            return ResponseEntity.badRequest().build();
+        }
+
         String sellerEmail = authentication.getName();
+        Long productId = productService.createProduct(request, images, sellerEmail);
 
-        Long productId = productService.createProduct(request, sellerEmail);
-
-        // 생성된 상품의 URI를 Location 헤더에 담아 201 Created 응답 반환
         return ResponseEntity.created(URI.create("/api/v1/products/" + productId)).build();
     }
 

@@ -1,10 +1,15 @@
 package io.github.suho149.realtime_auction.domain.product.dto;
 
+import io.github.suho149.realtime_auction.domain.product.entity.Category;
 import io.github.suho149.realtime_auction.domain.product.entity.Product;
+import io.github.suho149.realtime_auction.domain.product.entity.ProductImage;
 import io.github.suho149.realtime_auction.domain.product.entity.ProductStatus;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Getter
 public class ProductResponse {
@@ -19,9 +24,11 @@ public class ProductResponse {
     private final String sellerName;
     private final String highestBidderName;
     private final int bidderCount;
+    private final Category category;
+    private final List<String> imageUrls;
 
     // private 생성자: 모든 필드를 초기화하는 단일 생성자
-    private ProductResponse(Long id, String title, String description, Long startingPrice, Long currentPrice, LocalDateTime auctionStartTime, LocalDateTime auctionEndTime, ProductStatus status, String sellerName, String highestBidderName, int bidderCount) {
+    private ProductResponse(Long id, String title, String description, Long startingPrice, Long currentPrice, LocalDateTime auctionStartTime, LocalDateTime auctionEndTime, ProductStatus status, String sellerName, String highestBidderName, int bidderCount, Category category, List<String> imageUrls) {
         this.id = id;
         this.title = title;
         this.description = description;
@@ -33,6 +40,8 @@ public class ProductResponse {
         this.sellerName = sellerName;
         this.highestBidderName = highestBidderName;
         this.bidderCount = bidderCount;
+        this.category = category;
+        this.imageUrls = imageUrls;
     }
 
     // 정적 팩토리 메서드: Product 엔티티와 Redis 데이터를 조합하여 DTO 생성
@@ -71,33 +80,41 @@ public class ProductResponse {
         // 3. 총 입찰자 수 결정
         int finalBidderCount = (redisBidderCount != null) ? redisBidderCount.intValue() : 0;
 
+        // 이미지 URL 목록 추출
+        List<String> imageUrls = product.getImages().stream()
+                .map(ProductImage::getImageUrl)
+                .collect(Collectors.toList());
+
         return new ProductResponse(
                 product.getId(),
                 product.getTitle(),
                 product.getDescription(),
                 product.getStartingPrice(),
-                finalPrice, // 결정된 최종 가격을 currentPrice로 전달
+                finalPrice,
                 product.getAuctionStartTime(),
                 product.getAuctionEndTime(),
                 product.getStatus(),
                 product.getSeller().getName(),
-                finalBidderName, // 결정된 최종 입찰자 이름을 highestBidderName으로 전달
-                finalBidderCount
+                finalBidderName,
+                finalBidderCount,
+                product.getCategory(), // category 전달
+                imageUrls           // imageUrls 전달
         );
     }
 
-    // ▼▼▼ 목록 조회를 위한 정적 팩토리 메서드 추가 ▼▼▼
+    // 목록 조회를 위한 정적 팩토리 메서드
     public static ProductResponse forList(Product product) {
-        // 목록에서는 실시간 Redis 정보 없이 DB 데이터 기반으로만 생성
-        // currentPrice는 시작가 또는 낙찰가로, bidder 정보는 기본값으로 설정
         Long currentPrice = (product.getWinningPrice() != null) ? product.getWinningPrice() : product.getStartingPrice();
         String bidderName = (product.getWinner() != null) ? product.getWinner().getName() : "입찰자 없음";
+
+        // 목록에서는 대표 이미지 1장만 보여주거나, 아예 보여주지 않을 수 있음
+        List<String> imageUrls = product.getImages().isEmpty() ? Collections.emptyList() :
+                List.of(product.getImages().get(0).getImageUrl());
 
         return new ProductResponse(
                 product.getId(),
                 product.getTitle(),
-                // 목록에서는 상세 설명이 필요 없으므로 null 또는 빈 문자열 처리
-                "",
+                "", // 목록에서는 상세 설명 비움
                 product.getStartingPrice(),
                 currentPrice,
                 product.getAuctionStartTime(),
@@ -105,7 +122,9 @@ public class ProductResponse {
                 product.getStatus(),
                 product.getSeller().getName(),
                 bidderName,
-                0 // 목록에서는 총 입찰자 수를 보여주지 않음 (성능 이슈)
+                0, // 목록에서는 총 입찰자 수 0으로 고정
+                product.getCategory(), // category 전달
+                imageUrls           // imageUrls 전달
         );
     }
 }

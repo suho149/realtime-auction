@@ -75,3 +75,6 @@ yarn-error.log*
 /frontend/.env.development.local
 /frontend/.env.test.local
 /frontend/.env.production.local
+
+# Uploaded files
+/uploads/ # <-- 이 줄을 추가합니다.

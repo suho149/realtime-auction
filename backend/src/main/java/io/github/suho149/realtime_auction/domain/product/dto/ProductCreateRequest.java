@@ -1,5 +1,6 @@
 package io.github.suho149.realtime_auction.domain.product.dto;
 
+import io.github.suho149.realtime_auction.domain.product.entity.Category;
 import io.github.suho149.realtime_auction.global.validation.NotBeforeNow;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Min;
@@ -29,4 +30,7 @@ public class ProductCreateRequest {
     @NotNull(message = "경매 종료 시간은 필수입니다.")
     @NotBeforeNow(message = "경매 종료 시간은 현재 또는 미래여야 합니다.") // @Future 대신 사용
     private LocalDateTime auctionEndTime;
+
+    @NotNull(message = "카테고리는 필수입니다.")
+    private Category category;
 }

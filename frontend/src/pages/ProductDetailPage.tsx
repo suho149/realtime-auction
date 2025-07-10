@@ -6,6 +6,8 @@ import SockJS from 'sockjs-client';
 import { getCookieValue, deleteCookie } from '../utils/cookie';
 import Header from '../components/Header';
 import { Clock, User, Users, Info } from 'lucide-react';
+import "react-responsive-carousel/lib/styles/carousel.min.css"; // 캐러셀 CSS
+import { Carousel } from 'react-responsive-carousel';
 
 interface ProductDetail {
     id: number;
@@ -19,6 +21,8 @@ interface ProductDetail {
     status: string;
     sellerName: string;
     bidderCount: number;
+    imageUrls: string[];
+    category: string;
 }
 
 interface AuctionStatus {
@@ -138,9 +142,14 @@ const ProductDetailPage = () => {
             <main className="container mx-auto px-4 py-12">
                 <div className="bg-white p-8 md:p-12 rounded-2xl shadow-xl max-w-6xl mx-auto">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                        <div className="bg-gray-200 h-96 rounded-lg flex items-center justify-center">
-                            <span className="text-gray-500">Image Placeholder</span>
-                        </div>
+                        {/* 상품 이미지 캐러셀 */}
+                        <Carousel showArrows={true} autoPlay={true} infiniteLoop={true}>
+                            {product.imageUrls.map((url, index) => (
+                                <div key={index}>
+                                    <img src={`http://localhost:8080${url}`} alt={`${product.title} ${index + 1}`} />
+                                </div>
+                            ))}
+                        </Carousel>
 
                         <div className="flex flex-col justify-between">
                             <div>

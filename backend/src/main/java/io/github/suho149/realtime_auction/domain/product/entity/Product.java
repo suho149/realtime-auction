@@ -8,6 +8,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Getter
@@ -48,21 +50,38 @@ public class Product {
     @JoinColumn(name = "winner_id")
     private User winner; // 낙찰자
 
-    // 낙찰 처리 메서드
-    public void closeAuction(User winner, Long winningPrice) {
-        this.winner = winner;
-        this.winningPrice = winningPrice;
-        this.status = ProductStatus.SOLD_OUT;
-    }
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Category category; // 카테고리 필드 추가
 
+    // mappedBy: ProductImage 엔티티의 product 필드에 의해 관리됨
+    // cascade: Product가 저장/삭제될 때 ProductImage도 함께 처리
+    // orphanRemoval: Product와 연관관계가 끊어진 ProductImage는 자동 삭제
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ProductImage> images = new ArrayList<>();
+
+    // 생성자 수정
     @Builder
-    public Product(String title, String description, Long startingPrice, LocalDateTime auctionStartTime, LocalDateTime auctionEndTime, User seller) {
+    public Product(String title, String description, Long startingPrice, LocalDateTime auctionStartTime, LocalDateTime auctionEndTime, User seller, Category category) {
         this.title = title;
         this.description = description;
         this.startingPrice = startingPrice;
         this.auctionStartTime = auctionStartTime;
         this.auctionEndTime = auctionEndTime;
         this.seller = seller;
-        this.status = ProductStatus.SELLING; // 생성 시 기본 상태는 '판매중'
+        this.category = category; // 카테고리 초기화
+        this.status = ProductStatus.SELLING;
+    }
+
+    // 연관관계 편의 메서드
+    public void addImage(ProductImage image) {
+        this.images.add(image);
+    }
+
+    // 낙찰 처리 메서드
+    public void closeAuction(User winner, Long winningPrice) {
+        this.winner = winner;
+        this.winningPrice = winningPrice;
+        this.status = ProductStatus.SOLD_OUT;
     }
 }
