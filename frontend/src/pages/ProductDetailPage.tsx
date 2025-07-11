@@ -1,6 +1,6 @@
 // src/pages/ProductDetailPage.tsx
 
-import React, { useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
@@ -11,8 +11,8 @@ import { ProductDetail } from '../types/product'; // 타입 정의를 외부 파
 import { Clock, User, Users, Info } from 'lucide-react';
 import "react-responsive-carousel/lib/styles/carousel.min.css";
 import { Carousel } from 'react-responsive-carousel';
+import { useStompContext } from '../context/StompContext';
 
-// 이 파일 내에 있던 ProductDetail 인터페이스는 삭제합니다.
 
 interface AuctionStatus {
     currentHighestBid: number;
@@ -25,6 +25,8 @@ const ProductDetailPage = () => {
     const queryClient = useQueryClient();
     const { userInfo, isLoggedIn, logout } = useAuth();
     const [bidAmount, setBidAmount] = useState<number | ''>('');
+
+    const { publish, subscribe, unsubscribe } = useStompContext();
 
     const { data: product, isLoading, isError } = useQuery({
         queryKey: ['product', productId],
@@ -56,9 +58,33 @@ const ProductDetailPage = () => {
         }
     });
 
-    // useStomp 훅이 여러 번 호출되어도 괜찮지만, publish 함수는 한 번만 가져오면 됩니다.
-    // 더미 인자로 훅을 호출하여 publish 함수를 얻습니다.
-    const { publish } = useStomp({ topic: '', onMessage: () => {} });
+    // useEffect를 사용하여 구독 및 구독 해제 로직을 관리
+    useEffect(() => {
+        if (!productId) return;
+
+        // 경매 상태 구독
+        const auctionSubId = subscribe(`/topic/auctions/${productId}`, (message) => {
+            const newStatus = JSON.parse(message.body) as AuctionStatus;
+            queryClient.setQueryData(['product', productId], (oldData: any) => ({
+                ...oldData,
+                currentPrice: newStatus.currentHighestBid,
+                highestBidderName: newStatus.highestBidderName,
+                bidderCount: newStatus.bidderCount,
+            }));
+        });
+
+        // 에러 메시지 구독
+        const errorSubId = subscribe(`/user/queue/errors`, (message) => {
+            alert(`입찰 실패: ${message.body}`);
+        });
+
+        // 컴포넌트 언마운트 시 구독 해제
+        return () => {
+            if (auctionSubId) unsubscribe(auctionSubId);
+            if (errorSubId) unsubscribe(errorSubId);
+        };
+    }, [productId, subscribe, unsubscribe, queryClient]);
+
     const handleBidSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (isLoggedIn && productId && bidAmount) {
@@ -128,7 +154,7 @@ const ProductDetailPage = () => {
                                             min={product.currentPrice + 1}
                                             required
                                         />
-                                        <button type="submit" className="bg-blue-600 text-white font-bold py-4 px-8 rounded-lg hover:bg-blue-700 transition shadow-md">
+                                        <button type="submit" className="bg-blue-600 text-white font-bold py-4 px-8 rounded-lg hover:bg-blue-700 transition shadow-md whitespace-nowrap">
                                             입찰
                                         </button>
                                     </form>

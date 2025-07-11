@@ -8,6 +8,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import ProductCreatePage from './pages/ProductCreatePage';
 import ProductDetailPage from './pages/ProductDetailPage';
+import {StompProvider} from "./context/StompContext";
 
 // QueryClient 인스턴스 생성
 const queryClient = new QueryClient({
@@ -24,15 +25,17 @@ function App() {
     return (
         // QueryClientProvider로 앱 전체를 감싸줍니다.
         <QueryClientProvider client={queryClient}>
-            <BrowserRouter>
-                <Routes>
-                    <Route path="/" element={<HomePage />} />
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/products/new" element={<ProductCreatePage />} />
-                    <Route path="/products/:productId" element={<ProductDetailPage />} />
-                    {/* 다른 라우트들 */}
-                </Routes>
-            </BrowserRouter>
+            <StompProvider>
+                <BrowserRouter>
+                    <Routes>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/login" element={<LoginPage />} />
+                        <Route path="/products/new" element={<ProductCreatePage />} />
+                        <Route path="/products/:productId" element={<ProductDetailPage />} />
+                        {/* 다른 라우트들 */}
+                    </Routes>
+                </BrowserRouter>
+            </StompProvider>
             {/* 개발 환경에서만 Devtools가 보이도록 설정 */}
             <ReactQueryDevtools initialIsOpen={false} />
         </QueryClientProvider>

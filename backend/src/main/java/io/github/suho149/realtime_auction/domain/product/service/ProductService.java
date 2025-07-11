@@ -8,6 +8,7 @@ import io.github.suho149.realtime_auction.domain.product.entity.ProductImage;
 import io.github.suho149.realtime_auction.domain.product.repository.ProductRepository;
 import io.github.suho149.realtime_auction.domain.user.entity.User;
 import io.github.suho149.realtime_auction.domain.user.repository.UserRepository;
+import io.github.suho149.realtime_auction.global.constant.AuctionConstants;
 import io.github.suho149.realtime_auction.global.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -57,9 +58,26 @@ public class ProductService {
             }
         }
 
+        // 4. 상품을 DB에 저장 (이 시점에 product.id가 생성됨)
         Product savedProduct = productRepository.save(product);
-        return savedProduct.getId();
+        Long productId = savedProduct.getId();
+
+        // 상품 생성 후, 해당 ID의 잔여 Redis 데이터를 정리합니다.
+        cleanupAuctionRedisData(productId);
+
+        return productId;
     }
+
+    // Redis 데이터를 정리하는 헬퍼 메서드
+    private void cleanupAuctionRedisData(Long productId) {
+        List<String> keysToDelete = List.of(
+                AuctionConstants.getHighestBidKey(productId),
+                AuctionConstants.getHighestBidderKey(productId),
+                AuctionConstants.getBiddersSetKey(productId)
+        );
+        redisTemplate.delete(keysToDelete);
+    }
+
 
     // 상품 목록 조회
     public Page<ProductResponse> getProducts(Pageable pageable) {
