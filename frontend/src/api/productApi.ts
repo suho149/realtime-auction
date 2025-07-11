@@ -22,3 +22,11 @@ export const fetchProductDetail = async (productId: string): Promise<ProductDeta
     const { data } = await axiosInstance.get<ProductDetail>(`/api/v1/products/${productId}`);
     return data;
 };
+
+// 상품 생성(등록) API
+export const createProduct = async (formData: FormData) => {
+    const { data } = await axiosInstance.post('/api/v1/products', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data; // 성공 시 응답 데이터를 반환 (보통 생성된 리소스의 ID 등)
+};
