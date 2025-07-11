@@ -76,5 +76,11 @@ yarn-error.log*
 /frontend/.env.test.local
 /frontend/.env.production.local
 
-# Uploaded files
-/uploads/ # <-- 이 줄을 추가합니다.
+# =================================
+#  Uploaded & Generated Files
+# =================================
+# 업로드된 파일 및 로컬 생성 파일
+
+/uploads/
+uploads/
+*.log
