@@ -1,5 +1,6 @@
 package io.github.suho149.realtime_auction.domain.product.repository;
 
+import io.github.suho149.realtime_auction.domain.product.entity.Category;
 import io.github.suho149.realtime_auction.domain.product.entity.Product;
 import io.github.suho149.realtime_auction.domain.product.entity.ProductStatus;
 import io.lettuce.core.dynamic.annotation.Param;
@@ -27,4 +28,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     // 스케줄링 대상 조회 메서드 추가
     // 현재 시간을 기준으로, 경매 종료 시간이 지났고 상태가 SELLING인 상품들을 조회
     List<Product> findByAuctionEndTimeBeforeAndStatus(LocalDateTime now, ProductStatus status);
+
+    // 카테고리별 조회 메서드 추가
+    Page<Product> findByCategory(Category category, Pageable pageable);
 }

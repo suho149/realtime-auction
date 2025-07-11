@@ -3,6 +3,7 @@ package io.github.suho149.realtime_auction.domain.product.service;
 import io.github.suho149.realtime_auction.domain.auction.dto.AuctionStateDto;
 import io.github.suho149.realtime_auction.domain.product.dto.ProductCreateRequest;
 import io.github.suho149.realtime_auction.domain.product.dto.ProductResponse;
+import io.github.suho149.realtime_auction.domain.product.entity.Category;
 import io.github.suho149.realtime_auction.domain.product.entity.Product;
 import io.github.suho149.realtime_auction.domain.product.entity.ProductImage;
 import io.github.suho149.realtime_auction.domain.product.repository.ProductRepository;
@@ -80,9 +81,14 @@ public class ProductService {
 
 
     // 상품 목록 조회
-    public Page<ProductResponse> getProducts(Pageable pageable) {
-        return productRepository.findAllWithSeller(pageable)
-                .map(ProductResponse::forList);
+    public Page<ProductResponse> getProducts(Category category, Pageable pageable) {
+        Page<Product> products;
+        if (category == null) {
+            products = productRepository.findAll(pageable); // findAllWithSeller 대신 findAll 사용. 페이징 쿼리는 분리
+        } else {
+            products = productRepository.findByCategory(category, pageable);
+        }
+        return products.map(ProductResponse::forList);
     }
 
     // 상품 상세 조회

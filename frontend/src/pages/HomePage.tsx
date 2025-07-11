@@ -1,6 +1,6 @@
 // src/pages/HomePage.tsx
 
-import React, { useRef, useCallback } from 'react';
+import React, {useRef, useCallback, useState} from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth'; // 인증 관련 로직을 담은 커스텀 훅
 import { fetchProducts } from '../api/productApi'; // API 호출 함수
@@ -18,30 +18,35 @@ interface Product {
     thumbnailUrl?: string;
 }
 
+const CATEGORIES = [
+    { key: "", desc: "전체" }, // 필터링 없음을 의미하는 '전체' 카테고리
+    { key: "DIGITAL_DEVICE", desc: "디지털 기기" },
+    { key: "HOME_APPLIANCES", desc: "생활가전" },
+    { key: "FURNITURE_INTERIOR", desc: "가구/인테리어" },
+    { key: "LIFE_KITCHEN", desc: "생활/주방" },
+    { key: "CLOTHING", desc: "의류" },
+    { key: "BEAUTY", desc: "뷰티/미용" },
+    { key: "SPORTS_LEISURE", desc: "스포츠/레저" },
+    { key: "BOOKS_TICKETS_RECORDS", desc: "도서/티켓/음반" },
+    { key: "PET_SUPPLIES", desc: "반려동물용품" },
+    { key: "ETC", desc: "기타 중고물품" }
+];
+
 const HomePage = () => {
     // 1. useAuth 훅을 사용하여 사용자 정보와 로그아웃 함수를 가져옵니다.
     const { userInfo, logout } = useAuth();
+    const [category, setCategory] = useState(''); // 카테고리 필터 상태
+    const [sort, setSort] = useState('id,desc'); // 정렬 상태
 
     // 2. useInfiniteQuery 훅으로 상품 목록 데이터를 관리합니다.
     const {
-        data,
-        error,
-        fetchNextPage,
-        hasNextPage,
-        isFetching,
-        isFetchingNextPage,
+        data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage,
     } = useInfiniteQuery({
-        queryKey: ['products'],
-        queryFn: fetchProducts,
-        // ▼▼▼ 에러 해결을 위해 이 부분을 추가합니다 ▼▼▼
-        initialPageParam: 0, // 첫 페이지는 0번 페이지부터 시작
-        // ▲▲▲ 여기까지 추가 ▲▲▲
-        getNextPageParam: (lastPage, allPages) => {
-            if (lastPage.last) {
-                return undefined;
-            }
-            return allPages.length;
-        },
+        // queryKey에 필터와 정렬 상태를 포함하여, 상태 변경 시 새로운 쿼리로 인식하게 함
+        queryKey: ['products', category, sort],
+        queryFn: ({ pageParam }) => fetchProducts({ pageParam, category, sort }),
+        initialPageParam: 0,
+        getNextPageParam: (lastPage, allPages) => lastPage.last ? undefined : allPages.length,
     });
 
     // 3. Intersection Observer 로직
@@ -88,6 +93,31 @@ const HomePage = () => {
                         </div>
                     </div>
                 </section>
+
+                {/* 필터 및 정렬 UI 추가 */}
+                <div className="mb-8 p-4 bg-white rounded-lg shadow-sm flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap gap-2">
+                        {CATEGORIES.map(cat => (
+                            <button
+                                key={cat.key}
+                                onClick={() => setCategory(cat.key)}
+                                className={`px-4 py-2 text-sm font-medium rounded-full transition ${category === cat.key ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                            >
+                                {cat.desc}
+                            </button>
+                        ))}
+                    </div>
+                    <select
+                        value={sort}
+                        onChange={(e) => setSort(e.target.value)}
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        <option value="id,desc">최신순</option>
+                        <option value="auctionEndTime,asc">마감임박순</option>
+                        <option value="startingPrice,asc">낮은가격순</option>
+                        <option value="startingPrice,desc">높은가격순</option>
+                    </select>
+                </div>
 
                 {/* 상품 목록 렌더링 */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">

@@ -2,6 +2,7 @@ package io.github.suho149.realtime_auction.domain.product.controller;
 
 import io.github.suho149.realtime_auction.domain.product.dto.ProductCreateRequest;
 import io.github.suho149.realtime_auction.domain.product.dto.ProductResponse;
+import io.github.suho149.realtime_auction.domain.product.entity.Category;
 import io.github.suho149.realtime_auction.domain.product.service.ProductService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -44,8 +45,10 @@ public class ProductController {
     // 상품 목록 조회 API
     // 예: /api/v1/products?page=0&size=10&sort=id,desc
     @GetMapping
-    public ResponseEntity<Page<ProductResponse>> getProducts(@PageableDefault(size = 9, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
-        Page<ProductResponse> products = productService.getProducts(pageable);
+    public ResponseEntity<Page<ProductResponse>> getProducts(
+            @RequestParam(required = false) Category category, // 카테고리 파라미터 추가
+            @PageableDefault(size = 9, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
+        Page<ProductResponse> products = productService.getProducts(category, pageable);
         return ResponseEntity.ok(products);
     }
 

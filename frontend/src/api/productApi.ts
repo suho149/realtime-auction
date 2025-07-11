@@ -9,10 +9,23 @@ interface Page<T> {
     // ... 기타 페이징 정보
 }
 
-// 상품 목록 조회 API
-// useInfiniteQuery와 함께 사용하기 위해 pageParam을 받도록 수정
-export const fetchProducts = async ({ pageParam = 0 }) => {
-    const { data } = await axiosInstance.get<Page<any>>(`/api/v1/products?page=${pageParam}&size=9&sort=auctionEndTime,asc`);
+// API 호출을 위한 파라미터 타입 정의
+interface FetchProductsParams {
+    pageParam?: number;
+    category?: string;
+    sort?: string; // 예: "id,desc" 또는 "startingPrice,asc"
+}
+
+export const fetchProducts = async ({ pageParam = 0, category, sort = 'id,desc' }: FetchProductsParams) => {
+    const params = new URLSearchParams();
+    params.append('page', pageParam.toString());
+    params.append('size', '9');
+    params.append('sort', sort);
+    if (category) {
+        params.append('category', category);
+    }
+
+    const { data } = await axiosInstance.get(`/api/v1/products?${params.toString()}`);
     return data;
 };
 
