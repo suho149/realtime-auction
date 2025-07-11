@@ -1,5 +1,6 @@
 package io.github.suho149.realtime_auction.domain.product.service;
 
+import io.github.suho149.realtime_auction.domain.auction.dto.AuctionStateDto;
 import io.github.suho149.realtime_auction.domain.product.dto.ProductCreateRequest;
 import io.github.suho149.realtime_auction.domain.product.dto.ProductResponse;
 import io.github.suho149.realtime_auction.domain.product.entity.Product;
@@ -73,13 +74,23 @@ public class ProductService {
                 .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
 
         // 2. Redis에서 현재 경매 상태 조회
+        // 2. Redis에서 현재 경매 상태 조회 (헬퍼 메서드 사용)
+        AuctionStateDto auctionState = getAuctionStateFromRedis(productId);
+
+        // 3. Product와 AuctionStateDto를 DTO 생성 시 넘겨줌
+        return ProductResponse.of(product, auctionState);
+    }
+
+    // Redis에서 경매 정보를 조회하여 DTO로 반환하는 헬퍼 메서드
+    private AuctionStateDto getAuctionStateFromRedis(Long productId) {
         String highestBidStr = redisTemplate.opsForValue().get("auction:" + productId + ":highestBid");
         String highestBidderEmail = redisTemplate.opsForValue().get("auction:" + productId + ":highestBidder");
-
-        // 총 입찰자 수 조회 로직 추가
         Long bidderCount = redisTemplate.opsForSet().size("auction:" + productId + ":bidders");
 
-        // 3. ProductResponse DTO 생성 시, Redis 정보도 함께 넘겨줌
-        return ProductResponse.of(product, highestBidStr, highestBidderEmail, bidderCount);
+        return AuctionStateDto.builder()
+                .highestBid(highestBidStr != null ? Long.parseLong(highestBidStr) : null)
+                .highestBidderEmail(highestBidderEmail)
+                .bidderCount(bidderCount != null ? bidderCount.intValue() : 0)
+                .build();
     }
 }

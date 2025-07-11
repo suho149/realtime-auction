@@ -1,5 +1,6 @@
 package io.github.suho149.realtime_auction.domain.product.dto;
 
+import io.github.suho149.realtime_auction.domain.auction.dto.AuctionStateDto;
 import io.github.suho149.realtime_auction.domain.product.entity.Category;
 import io.github.suho149.realtime_auction.domain.product.entity.Product;
 import io.github.suho149.realtime_auction.domain.product.entity.ProductImage;
@@ -47,40 +48,32 @@ public class ProductResponse {
     }
 
     // 정적 팩토리 메서드: Product 엔티티와 Redis 데이터를 조합하여 DTO 생성
-    public static ProductResponse of(Product product, String redisHighestBid, String redisHighestBidderEmail, Long redisBidderCount) {
+    public static ProductResponse of(Product product, AuctionStateDto auctionState) {
         Long finalPrice;
         String finalBidderName;
 
         // 1. 최종 가격 결정
-        // 경매가 종료되고 낙찰가가 정해졌으면 DB의 winningPrice를 사용
         if (product.getStatus() == ProductStatus.SOLD_OUT && product.getWinningPrice() != null) {
             finalPrice = product.getWinningPrice();
-        }
-        // 경매 진행 중 Redis에 최고가가 있으면 그 값을 사용
-        else if (redisHighestBid != null) {
-            finalPrice = Long.parseLong(redisHighestBid);
-        }
-        // 그 외의 경우 (아직 입찰이 없는 경우) 시작가를 현재가로 사용
-        else {
+        } else if (auctionState.getHighestBid() != null) {
+            finalPrice = auctionState.getHighestBid();
+        } else {
             finalPrice = product.getStartingPrice();
         }
 
         // 2. 최종 입찰자 이름 결정
-        // 경매가 종료되고 낙찰자가 정해졌으면 DB의 winner 이름을 사용
         if (product.getStatus() == ProductStatus.SOLD_OUT && product.getWinner() != null) {
             finalBidderName = product.getWinner().getName();
-        }
-        // 경매 진행 중 Redis에 최고 입찰자가 있으면 그 이메일(또는 이름)을 사용
-        else if (redisHighestBidderEmail != null) {
-            finalBidderName = redisHighestBidderEmail; // 우선 이메일로 설정 (추후 User 조회로 이름 변경 가능)
-        }
-        // 그 외의 경우
-        else {
+        } else if (auctionState.getHighestBidderEmail() != null) {
+            // 참고: 이메일 대신 이름을 보여주고 싶다면 여기서 User 조회를 한 번 더 해야 함
+            // 하지만 API 응답 속도를 위해 이메일을 그대로 보여주는 것도 선택
+            finalBidderName = auctionState.getHighestBidderEmail();
+        } else {
             finalBidderName = "입찰자 없음";
         }
 
         // 3. 총 입찰자 수 결정
-        int finalBidderCount = (redisBidderCount != null) ? redisBidderCount.intValue() : 0;
+        int finalBidderCount = auctionState.getBidderCount();
 
         // 이미지 URL 목록 추출
         List<String> imageUrls = product.getImages().stream()

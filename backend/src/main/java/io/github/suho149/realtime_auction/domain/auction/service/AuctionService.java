@@ -3,6 +3,7 @@ package io.github.suho149.realtime_auction.domain.auction.service;
 import io.github.suho149.realtime_auction.domain.auction.dto.AuctionStatusResponse;
 import io.github.suho149.realtime_auction.domain.product.entity.Product;
 import io.github.suho149.realtime_auction.domain.product.repository.ProductRepository;
+import io.github.suho149.realtime_auction.global.constant.AuctionConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
@@ -11,6 +12,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.stereotype.Service;
 
+import java.security.Principal;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -23,9 +25,9 @@ public class AuctionService {
     private final RedissonClient redissonClient;
     private final SimpMessageSendingOperations messagingTemplate;
 
-    public void placeBid(Long productId, Long bidAmount, String bidderName) {
+    public void placeBid(Long productId, Long bidAmount, String bidderName, Principal principal) {
         // Redisson을 이용한 분산 락 획득
-        RLock lock = redissonClient.getLock("auction_lock:" + productId);
+        RLock lock = redissonClient.getLock(AuctionConstants.getAuctionLockKey(productId));
 
         try {
             // 락 획득 시도 (최대 10초 대기, 락 획득 후 5초간 유효)
@@ -41,20 +43,31 @@ public class AuctionService {
             Product product = productRepository.findById(productId)
                     .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
 
-            String highestBidStr = redisTemplate.opsForValue().get("auction:" + productId + ":highestBid");
+            String highestBidStr = redisTemplate.opsForValue().get(AuctionConstants.getHighestBidKey(productId));
             long currentHighestBid = (highestBidStr != null) ? Long.parseLong(highestBidStr) : product.getStartingPrice();
 
             // 2. 유효성 검증: 새 입찰가가 현재 최고가보다 높은지 확인
+            // 유효성 검증 실패 시, 사용자에게만 에러 메시지 전송
             if (bidAmount <= currentHighestBid) {
-                // TODO: 입찰가가 낮을 경우 특정 사용자에게만 에러 메시지 전송
-                log.info("입찰가가 현재 최고가보다 낮거나 같습니다.");
+                log.info("입찰가가 현재 최고가보다 낮거나 같습니다. User: {}, Bid: {}", bidderName, bidAmount);
+
+                // 에러 메시지 전송을 위한 DTO나 Map 사용 권장
+                String errorMessage = "입찰가는 현재 최고가(" + currentHighestBid + "원)보다 높아야 합니다.";
+
+                // convertAndSendToUser: 특정 사용자에게만 메시지 전송
+                // Spring이 자동으로 /user/{username}/queue/errors 경로로 변환하여 전송
+                messagingTemplate.convertAndSendToUser(
+                        principal.getName(),          // 메시지를 받을 사용자 식별자 (email)
+                        "/queue/errors",              // 클라이언트가 구독할 주소
+                        errorMessage                  // 보낼 메시지 (객체 또는 문자열)
+                );
                 return;
             }
 
             // 3. Redis에 새로운 최고가와 입찰자 정보 업데이트
-            redisTemplate.opsForValue().set("auction:" + productId + ":highestBid", String.valueOf(bidAmount));
-            redisTemplate.opsForValue().set("auction:" + productId + ":highestBidder", bidderName);
-            redisTemplate.opsForSet().add("auction:" + productId + ":bidders", bidderName);
+            redisTemplate.opsForValue().set(AuctionConstants.getHighestBidKey(productId), String.valueOf(bidAmount));
+            redisTemplate.opsForValue().set(AuctionConstants.getHighestBidderKey(productId), bidderName);
+            redisTemplate.opsForSet().add(AuctionConstants.getBiddersSetKey(productId), bidderName);
             // --- 임계 영역 종료 ---
 
         } catch (InterruptedException e) {
@@ -85,6 +98,6 @@ public class AuctionService {
         );
 
         // 해당 상품의 토픽을 구독 중인 모든 클라이언트에게 메시지 전송
-        messagingTemplate.convertAndSend("/topic/auctions/" + productId, statusResponse);
+        messagingTemplate.convertAndSend(AuctionConstants.getAuctionTopicPath(productId), statusResponse);
     }
 }

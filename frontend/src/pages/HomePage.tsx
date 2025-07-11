@@ -1,104 +1,78 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import axiosInstance from '../api/axiosInstance';
-import { getCookieValue, deleteCookie } from '../utils/cookie';
+// src/pages/HomePage.tsx
+
+import React, { useRef, useCallback } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { useAuth } from '../hooks/useAuth'; // 인증 관련 로직을 담은 커스텀 훅
+import { fetchProducts } from '../api/productApi'; // API 호출 함수
 import Header from '../components/Header';
 import ProductCard from '../components/ProductCard';
 import { Search } from 'lucide-react';
 
+// Product 타입을 인터페이스로 정의
 interface Product {
     id: number;
     title: string;
     startingPrice: number;
     auctionEndTime: string;
     sellerName: string;
-    thumbnailUrl?: string; // 썸네일 URL (옵셔널)
-}
-
-interface Page<T> {
-    content: T[];
-    last: boolean;
-}
-
-interface UserInfo {
-    name: string;
-    email: string;
-    picture: string;
+    thumbnailUrl?: string;
 }
 
 const HomePage = () => {
-    const [products, setProducts] = useState<Product[]>([]);
-    const [page, setPage] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
-    const [loading, setLoading] = useState(false);
-    const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+    // 1. useAuth 훅을 사용하여 사용자 정보와 로그아웃 함수를 가져옵니다.
+    const { userInfo, logout } = useAuth();
 
+    // 2. useInfiniteQuery 훅으로 상품 목록 데이터를 관리합니다.
+    const {
+        data,
+        error,
+        fetchNextPage,
+        hasNextPage,
+        isFetching,
+        isFetchingNextPage,
+    } = useInfiniteQuery({
+        queryKey: ['products'],
+        queryFn: fetchProducts,
+        // ▼▼▼ 에러 해결을 위해 이 부분을 추가합니다 ▼▼▼
+        initialPageParam: 0, // 첫 페이지는 0번 페이지부터 시작
+        // ▲▲▲ 여기까지 추가 ▲▲▲
+        getNextPageParam: (lastPage, allPages) => {
+            if (lastPage.last) {
+                return undefined;
+            }
+            return allPages.length;
+        },
+    });
+
+    // 3. Intersection Observer 로직
     const observer = useRef<IntersectionObserver>();
     const lastProductElementRef = useCallback((node: HTMLDivElement | null) => {
-        if (loading) return;
+        if (isFetchingNextPage) return;
         if (observer.current) observer.current.disconnect();
+
         observer.current = new IntersectionObserver(entries => {
-            if (entries[0].isIntersecting && hasMore) {
-                setPage(prevPage => prevPage + 1);
+            if (entries[0].isIntersecting && hasNextPage) {
+                fetchNextPage();
             }
         });
+
         if (node) observer.current.observe(node);
-    }, [loading, hasMore]);
+    }, [isFetchingNextPage, hasNextPage, fetchNextPage]);
 
-    useEffect(() => {
-        const initialize = async () => {
-            try {
-                const response = await axiosInstance.get<UserInfo>('/api/v1/users/me');
-                setUserInfo(response.data);
-            } catch (error) {
-                console.log("비로그인 상태이거나 토큰이 만료되었습니다.");
-                setUserInfo(null);
-            }
-        };
-        initialize();
-    }, []);
+    // 4. 데이터를 단일 배열로 펼치는 로직
+    const products: Product[] = data?.pages.flatMap(page => page.content) ?? [];
 
-    useEffect(() => {
-        // page가 0일 때는 초기 로드, 그 이후에는 무한 스크롤로 간주
-        // 이미 데이터가 있는데 page가 0이면 중복 로드일 수 있으므로 방지
-        if (page === 0 && products.length > 0) return;
-
-        const fetchProducts = async () => {
-            setLoading(true);
-            try {
-                const response = await axiosInstance.get<Page<Product>>(`/api/v1/products?page=${page}&size=9&sort=auctionEndTime,asc`);
-
-                setProducts(prev => {
-                    const existingIds = new Set(prev.map(p => p.id));
-                    const newProducts = response.data.content.filter(p => !existingIds.has(p.id));
-                    return [...prev, ...newProducts];
-                });
-
-                setHasMore(!response.data.last);
-            } catch (error) {
-                console.error("상품 목록 조회 실패:", error);
-            }
-            setLoading(false);
-        };
-        fetchProducts();
-    }, [page]);
-
-    const handleLogout = async () => {
-        try {
-            await axiosInstance.post('/api/v1/auth/logout');
-        } catch (error) {
-            console.error("로그아웃 API 호출 실패:", error);
-        } finally {
-            deleteCookie('access_token');
-            deleteCookie('refresh_token');
-            setUserInfo(null);
-        }
-    };
+    // 에러 처리
+    if (error) {
+        return <div>상품 목록을 불러오는 중 에러가 발생했습니다.</div>
+    }
 
     return (
         <div className="bg-gray-50 min-h-screen">
-            <Header userInfo={userInfo} onLogout={handleLogout} />
+            <Header userInfo={userInfo ?? null} onLogout={logout} />
 
             <main className="container mx-auto px-4 py-8">
+                {/* 메인 배너 및 검색창 UI */}
                 <section className="text-center bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-24 px-6 rounded-2xl shadow-2xl mb-16 relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-full bg-black bg-opacity-20"></div>
                     <div className="relative z-10">
@@ -115,6 +89,7 @@ const HomePage = () => {
                     </div>
                 </section>
 
+                {/* 상품 목록 렌더링 */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                     {products.map((product, index) => {
                         if (products.length === index + 1) {
@@ -125,13 +100,16 @@ const HomePage = () => {
                     })}
                 </div>
 
-                {loading && (
+                {/* 로딩 상태 UI */}
+                {(isFetching || isFetchingNextPage) && (
                     <div className="text-center py-12">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
                         <p className="mt-4 text-gray-600">상품을 불러오는 중...</p>
                     </div>
                 )}
-                {!hasMore && products.length > 0 && (
+
+                {/* 더 이상 불러올 페이지가 없을 때의 UI */}
+                {!hasNextPage && products.length > 0 && !isFetching && (
                     <p className="text-center text-gray-500 py-12">모든 상품을 불러왔습니다.</p>
                 )}
             </main>

@@ -83,6 +83,16 @@ const ProductCreatePage = () => {
             return;
         }
 
+        // 현재 시간 정보 로그
+        console.log('=== 시간 디버깅 정보 ===');
+        console.log('현재 시간 (로컬):', new Date().toString());
+        console.log('현재 시간 (UTC):', new Date().toISOString());
+        console.log('시작 시간 (로컬):', auctionStartTime?.toString());
+        console.log('시작 시간 (UTC):', auctionStartTime?.toISOString());
+        console.log('종료 시간 (로컬):', auctionEndTime?.toString());
+        console.log('종료 시간 (UTC):', auctionEndTime?.toISOString());
+        console.log('브라우저 시간대:', Intl.DateTimeFormat().resolvedOptions().timeZone);
+
         const formData = new FormData();
 
         // JSON 데이터를 Blob으로 만들어 FormData에 추가
