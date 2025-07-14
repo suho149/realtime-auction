@@ -2,6 +2,7 @@ package io.github.suho149.realtime_auction.global.config;
 
 import io.github.suho149.realtime_auction.domain.user.service.CustomOAuth2UserService;
 import io.github.suho149.realtime_auction.global.handler.CustomAuthenticationEntryPoint;
+import io.github.suho149.realtime_auction.global.handler.CustomLogoutSuccessHandler;
 import io.github.suho149.realtime_auction.global.handler.OAuth2LoginSuccessHandler;
 import io.github.suho149.realtime_auction.global.jwt.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class SecurityConfig {
     private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
+    private final CustomLogoutSuccessHandler customLogoutSuccessHandler;
 
     // CORS 설정을 위한 Bean 추가
     @Bean
@@ -65,10 +67,11 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // 상품 목록 조회는 인증 없이도 가능하도록 변경
+                        // /images/** 경로를 추가
+                        .requestMatchers("/images/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products", "/api/v1/products/**").permitAll()
                         .requestMatchers("/", "/login", "/oauth2/**", "/api/v1/auth/reissue").permitAll()
-                        .requestMatchers("/ws/**").permitAll() // WebSocket 경로 허용 추가
+                        .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2
